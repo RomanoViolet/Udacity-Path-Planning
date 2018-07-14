@@ -1,12 +1,13 @@
 Udacity Path Planning Project
+=============================
 
 Context
-=======
+-------
 
 This project implements the “Path Planning” project required in Semester 3 of the Udacity’s “[Self Driving Car NanoDegree Program](https://de.udacity.com/course/self-driving-car-engineer-nanodegree--nd013)”
 
 Problem Statement
-=================
+-----------------
 
 Given
 
