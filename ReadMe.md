@@ -1,10 +1,12 @@
 Udacity Path Planning Project
 
 Context
+=======
 
 This project implements the “Path Planning” project required in Semester 3 of the Udacity’s “[Self Driving Car NanoDegree Program](https://de.udacity.com/course/self-driving-car-engineer-nanodegree--nd013)”
 
 Problem Statement
+=================
 
 Given
 
@@ -139,5 +141,3 @@ Corresponding weights:
 1. weight: 1.0: Rover’s Initial Position to the Bachelor’s Location
 
 2. weight: 10.0: Bachelor’s location to the location of the wedding.
-
-
