@@ -1,0 +1,464 @@
+/*
+ * PathPlanner.cpp
+ *
+ *  Created on: Mar 24, 2018
+ *      Author: dumbledore
+ */
+
+#include <cstddef>
+#include <limits>
+#include <cmath>
+#include <cassert>
+#include <iostream>
+#include "PathPlanner.hpp"
+
+//TODO: Possibly remove dx and dy waypoint data.
+
+PathPlanner::PathPlanner(const std::vector<double>& map_waypoints_x,
+                         const std::vector<double>& map_waypoints_y,
+                         const std::vector<double>& map_waypoints_s,
+                         const std::vector<double>& map_waypoints_dx,
+                         const std::vector<double>& map_waypoints_dy,
+                         const unsigned intendedLane) {
+  this->processWayPointData(map_waypoints_x, map_waypoints_y, map_waypoints_s,
+                            map_waypoints_dx, map_waypoints_dy);
+  this->state = Commons::State::KeepLane;
+  this->intendedLane = intendedLane;
+
+}
+
+PathPlanner::~PathPlanner() {
+
+}
+
+void PathPlanner::processWayPointData(
+    const std::vector<double>& map_waypoints_x,
+    const std::vector<double>& map_waypoints_y,
+    const std::vector<double>& map_waypoints_s,
+    const std::vector<double>& map_waypoints_dx,
+    const std::vector<double>& map_waypoints_dy) {
+  double XCoordinate_MapReference;
+  double YCoordinate_MapReference;
+  double SCoordinate_LaneReference;
+  double DCoordinate_XComponent;
+  double DCoordinate_YComponent;
+
+  for (size_t i = 0; i < map_waypoints_x.size(); ++i) {
+    XCoordinate_MapReference = map_waypoints_x[i];
+    YCoordinate_MapReference = map_waypoints_y[i];
+    SCoordinate_LaneReference = map_waypoints_s[i];
+    DCoordinate_XComponent = map_waypoints_dx[i];
+    DCoordinate_YComponent = map_waypoints_dy[i];
+    this->allWayPoints.push_back(
+        WayPoint(XCoordinate_MapReference, YCoordinate_MapReference,
+                 SCoordinate_LaneReference, DCoordinate_XComponent,
+                 DCoordinate_YComponent));
+  }
+
+}
+
+void PathPlanner::updateNonEgoVehicleData(
+    const std::vector<std::vector<double>>& allNonEgoVehiclesInSameDirection) {
+  // make sure that the container is empty to start with
+  this->allNonEgoVehicles.clear();
+
+  //iterator for each non-ego vehicle
+  std::vector<std::vector<double>>::const_iterator thisNonEgoVehicle;
+
+// temporaries
+  double XCoordinate_MapReference;
+  double YCoordinate_MapReference;
+  double Velocity_XComponent;
+  double Velocity_YComponent;
+  double SCoordinate_LaneReference;
+  double DCoordinate_LaneReference;
+  std::vector<double> dataForThisNonEgoVehicle;
+  // now go over all the input data
+  for (thisNonEgoVehicle = allNonEgoVehiclesInSameDirection.begin();
+      thisNonEgoVehicle != allNonEgoVehiclesInSameDirection.end();
+      ++thisNonEgoVehicle) {
+
+    dataForThisNonEgoVehicle = *thisNonEgoVehicle;
+
+    XCoordinate_MapReference = dataForThisNonEgoVehicle[1];
+    YCoordinate_MapReference = dataForThisNonEgoVehicle[2];
+    Velocity_XComponent = dataForThisNonEgoVehicle[3];
+    Velocity_YComponent = dataForThisNonEgoVehicle[4];
+    SCoordinate_LaneReference = dataForThisNonEgoVehicle[5];
+    DCoordinate_LaneReference = dataForThisNonEgoVehicle[6];
+
+    this->allNonEgoVehicles.push_back(
+        NonEgoVehicle(XCoordinate_MapReference, YCoordinate_MapReference,
+                      Velocity_XComponent, Velocity_YComponent,
+                      SCoordinate_LaneReference, DCoordinate_LaneReference));
+
+  }
+}
+
+void PathPlanner::updateEgoVehicleData(
+    const std::vector<double>& EgoVehicleData) {
+
+// temporaries
+  double XCoordinate_MapReference = EgoVehicleData[0];
+  double YCoordinate_MapReference = EgoVehicleData[1];
+  double Velocity = EgoVehicleData[2];
+  double Yaw = EgoVehicleData[3];
+  double SCoordinate_LaneReference = EgoVehicleData[4];
+  double DCoordinate_LaneReference = EgoVehicleData[5];
+
+  this->egoVehicleLocation = EgoVehicle(XCoordinate_MapReference,
+                                        YCoordinate_MapReference, Velocity, Yaw,
+                                        SCoordinate_LaneReference,
+                                        DCoordinate_LaneReference);
+
+}  //void PathPlanner::updateEgoVehicleData
+
+std::vector<Commons::State> PathPlanner::getPossibleNewStates() {
+  std::vector<Commons::State> allPossibleNewStates;
+
+  switch (this->state) {
+    case Commons::State::KeepLane: {
+      allPossibleNewStates.push_back(Commons::State::KeepLane);
+      /*allPossibleNewStates.push_back(Commons::State::Prepare_To_Change_Left);
+       allPossibleNewStates.push_back(Commons::State::Prepare_To_Change_Right);*/
+      break;
+    }
+    case Commons::State::Move_Left: {
+      allPossibleNewStates.push_back(Commons::State::Move_Left);
+      allPossibleNewStates.push_back(Commons::State::KeepLane);
+      break;
+    }
+    case Commons::State::Move_Right: {
+      allPossibleNewStates.push_back(Commons::State::Move_Right);
+      allPossibleNewStates.push_back(Commons::State::KeepLane);
+      break;
+    }
+    case Commons::State::Prepare_To_Change_Left: {
+      allPossibleNewStates.push_back(Commons::State::Prepare_To_Change_Left);
+      allPossibleNewStates.push_back(Commons::State::KeepLane);
+      allPossibleNewStates.push_back(Commons::State::Move_Left);
+      break;
+    }
+    case Commons::State::Prepare_To_Change_Right: {
+      allPossibleNewStates.push_back(Commons::State::Prepare_To_Change_Right);
+      allPossibleNewStates.push_back(Commons::State::Move_Right);
+      allPossibleNewStates.push_back(Commons::State::KeepLane);
+      break;
+    }
+    default: {
+      break;
+    }
+  }
+
+  return (allPossibleNewStates);
+}
+
+void PathPlanner::getTrailingNonEgoVehicle(NonEgoVehicle& trailingNonEgoVehicle) {
+
+  // We are expecting the number to be: 2: Lane 0, 6: Lane 1, 10: Lane 2.
+  short laneOfEgoVehicle = static_cast<short>(this->egoVehicleLocation
+      .getDCoordinate() / LaneWidth);
+
+  // s coordinate of the ego vehicle
+  double sOfEgoVehicle = this->egoVehicleLocation.getSCoordinatee();
+
+  // temporaries
+  double sTemp = -std::numeric_limits<double>::infinity();
+
+  for (NonEgoVehicle thisNonEgoVehicle : this->allNonEgoVehicles) {
+    short LaneOfThisNonEgoVehicle = static_cast<short>(thisNonEgoVehicle
+        .getDCoordinate() / LaneWidth);
+    // find out this vehicle's lane
+    if (LaneOfThisNonEgoVehicle == laneOfEgoVehicle) {
+      // this non-ego vehicle is in the same lane as the ego vehicle
+
+      // Is this non-ego vehicle directly in front?
+      // Find the vehicle with the smallest s > ego.s
+      if ((thisNonEgoVehicle.getSCoordinatee() < sOfEgoVehicle)
+          && (thisNonEgoVehicle.getSCoordinatee() > sTemp)) {
+        trailingNonEgoVehicle = thisNonEgoVehicle;
+        sTemp = thisNonEgoVehicle.getSCoordinatee();
+      }
+
+    }
+  }
+
+}
+
+void PathPlanner::getLeadingNonEgoVehicle(NonEgoVehicle& leadingNonEgoVehicle) {
+
+
+// We are expecting the number to be: 2: Lane 0, 6: Lane 1, 10: Lane 2.
+  short laneOfEgoVehicle = static_cast<short>(this->egoVehicleLocation
+      .getDCoordinate() / LaneWidth);
+
+// s coordinate of the ego vehicle
+  double sOfEgoVehicle = this->egoVehicleLocation.getSCoordinatee();
+
+// temporaries
+  double sTemp = std::numeric_limits<double>::infinity();
+
+  short laneOfNonEgoVehicle = 0;
+  for (NonEgoVehicle thisNonEgoVehicle : this->allNonEgoVehicles) {
+    // find out this vehicle's lane
+    laneOfNonEgoVehicle = static_cast<short>(thisNonEgoVehicle.getDCoordinate()
+        / LaneWidth);
+    if (laneOfNonEgoVehicle == laneOfEgoVehicle) {
+      // this non-ego vehicle is in the same lane as the ego vehicle
+
+      // Is this non-ego vehicle directly in front?
+      // Find the vehicle with the smallest s > ego.s
+      if ((thisNonEgoVehicle.getSCoordinatee() > sOfEgoVehicle)
+          && (thisNonEgoVehicle.getSCoordinatee() < sTemp)) {
+        leadingNonEgoVehicle = thisNonEgoVehicle;
+        sTemp = thisNonEgoVehicle.getSCoordinatee();
+      }
+
+    }
+  }
+
+  /* if there was no ego vehicle in front, then the ego-vehicle is likely approaching the start point, and the leading vehicle is just beyond the start position
+   * therefore, we find a non-ego vehicle with the smallest s.
+   */
+  /*
+   // temporaries
+   if (leadingNonEgoVehicle.isEmpty()) {
+   sTemp = std::numeric_limits<double>::infinity();
+   for (NonEgoVehicle thisNonEgoVehicle : this->allNonEgoVehicles) {
+   // find out this vehicle's lane
+   if ((std::fmod(thisNonEgoVehicle.getDCoordinate(),
+   static_cast<double>(LaneWidth))) == laneOfEgoVehicle) {
+   // this non-ego vehicle is in the same lane as the ego vehicle
+
+   // Is this non-ego vehicle directly in front?
+   // Find the vehicle with the smallest s > ego.s
+   if ((thisNonEgoVehicle.getSCoordinatee() < sOfEgoVehicle)
+   && (thisNonEgoVehicle.getSCoordinatee() < sTemp)) {
+   leadingNonEgoVehicle = thisNonEgoVehicle;
+   sTemp = thisNonEgoVehicle.getSCoordinatee();
+   }
+
+   }
+   }
+   }  // if(leadingNonEgoVehicle.isEmpty())
+   */
+
+
+}
+
+
+Trajectory PathPlanner::computeTrajectory_KeepLane(Commons::State thisState) {
+// Is there a vehicle in front of the Ego?
+  Curve curve;
+  NonEgoVehicle vehicleAheadOfEgoVehicle;
+  NonEgoVehicle vehicleTrailingEgoVehicle;
+
+  getLeadingNonEgoVehicle(vehicleAheadOfEgoVehicle);
+  getTrailingNonEgoVehicle(vehicleTrailingEgoVehicle);
+
+  double span = SampleTime * nSteps;
+  double FinalIncrementInS;
+  double FinalVelocity;
+  double acceleration;
+  /*
+   * The speed of the ego is dominated by the vehicle in front.
+   * If no vehicle in front is found, the the speed is dominated by the vehicle at the rear.
+   * If no vehicle at the front or rear is found, then the ego moves within constraints
+   */
+
+  if (vehicleAheadOfEgoVehicle.isEmpty() == false) {
+    std::cout << "Found: Leading Vehicle" << std::endl;
+    /*
+     * Leading vehicle dominates the Ego
+     */
+
+    // the velocity of the leading vehicle
+    double velocityLeadingVehicle = vehicleAheadOfEgoVehicle.getVelocity();
+
+    // distance to the leading vehicle
+    double distanceToLeadingVehicle =
+        vehicleAheadOfEgoVehicle.getSCoordinatee();
+
+    // difference in velocity between ego and leading vehicle
+    double differenceInVelocity = velocityLeadingVehicle
+        - this->egoVehicleLocation.getVelocity();
+
+    FinalVelocity = std::min(
+        velocityLeadingVehicle,
+        this->egoVehicleLocation.getVelocity()
+            + maxAllowedAcceleration * (span));
+    // compute current acceleration
+    acceleration = (this->egoVehicleLocation.getVelocity()
+        - this->egoVehicleLocation.getOldVelocity()) / SampleTime;
+
+    if (distanceToLeadingVehicle - bufferToLeadingVehicle > 0) {
+      FinalIncrementInS = std::min(
+          distanceToLeadingVehicle - bufferToLeadingVehicle,
+          (this->egoVehicleLocation.getVelocity() * (span))
+              + (0.5 * maxAllowedAcceleration * (span)
+                  * (span)));
+    } else {
+      // the leading vehicle is really close: Do not move ahead.
+      FinalIncrementInS = 0;
+    }
+
+    /*    std::vector<double> start { this->egoVehicleLocation.getSCoordinatee(), this
+     ->egoVehicleLocation.getVelocity(), acceleration };
+     std::vector<double> end { this->egoVehicleLocation.getSCoordinatee()
+     + FinalIncrementInS, FinalVelocity, 0 };*/
+
+  } else if (vehicleTrailingEgoVehicle.isEmpty() == false) {
+    std::cout << "Found: Trailing Vehicle" << std::endl;
+    // the velocity of the trailing vehicle
+    double velocityTrailingVehicle = vehicleTrailingEgoVehicle.getVelocity();
+
+    // distance to the ego vehicle
+    double distanceToEgoVehicle = this->egoVehicleLocation.getSCoordinatee()
+        - vehicleTrailingEgoVehicle.getSCoordinatee();
+
+    //difference in velocity between ego and trailing vehicle
+    double differenceInVelocity = vehicleTrailingEgoVehicle.getVelocity()
+        - this->egoVehicleLocation.getVelocity();
+
+    //TODO: Add the case when the trailing vehicle is slower than the ego vehicle.
+
+    // The velocity to achieve at the end of the span
+    FinalVelocity = std::min(
+        differenceInVelocity,
+        this->egoVehicleLocation.getVelocity()
+            + maxAllowedAcceleration * (span));
+
+    // compute current acceleration
+    acceleration = (this->egoVehicleLocation.getVelocity()
+        - this->egoVehicleLocation.getOldVelocity()) / SampleTime;
+
+    FinalIncrementInS = (this->egoVehicleLocation.getVelocity()
+        * (span))
+        + (0.5 * maxAllowedAcceleration * (span)
+            * (span));
+
+  } else {
+    /*
+     * No vehicle either at the front or the rear
+     */
+    std::cout << "No Vehicle Around" << std::endl;
+
+    // The velocity to achieve at the end of the span
+    FinalVelocity = this->egoVehicleLocation.getVelocity()
+        + (maxAllowedAcceleration * (span));
+
+    // compute current acceleration
+    acceleration = (this->egoVehicleLocation.getVelocity()
+        - (this->egoVehicleLocation.getOldVelocity()) / SampleTime);
+
+    FinalIncrementInS = (this->egoVehicleLocation.getVelocity()
+        * (span))
+        + (0.5 * maxAllowedAcceleration * span * span);
+  }
+
+  /* Under simplifying assumptions, corner cases are not expected
+   * e.g., the vehicle suddenly appears in front requiring the ego vehicle to execute
+   * an emergency stop.
+   */
+
+  /* Case 1: differenceInVelocity < 0 (Ego is moving faster than leading vehicle) AND
+   *         distanceToLeadingVehicle - bufferToLeadingVehicle > 0
+   *         Then: Ego first closes the distance
+   *         Velocity allowed to reach after span: current*span  + 0.5 * max_acceleration * span * span
+   *         Boundary Conditions to the Quintic Polynomial Solver:
+   *         Start: [s, v, a] = [this->egoVehicleLocation._SCoordinate_LaneReference, this->egoVehicleLocation.getVelocity(),acceleration]
+   *         End: [s, v, a] = [this->egoVehicleLocation._SCoordinate_LaneReference + distanceToLeadingVehicle - bufferToLeadingVehicle, velocityLeadingVehicle, 0]
+   *
+   */
+  if(this->egoVehicleLocation.getVelocity() < 1.0)
+  {
+    // hack
+    FinalIncrementInS = FinalIncrementInS + 1.0;
+  }
+
+  assert(FinalIncrementInS > 0 && "Final Increment is Zero!");
+  std::vector<double> start { this->egoVehicleLocation.getSCoordinatee(), this
+      ->egoVehicleLocation.getVelocity(), 0 };
+  std::vector<double> end { this->egoVehicleLocation.getSCoordinatee()
+      + (FinalIncrementInS), FinalVelocity, 0 };
+
+  std::vector<double> sArray = curve.getJerkOptimalCurve(start, end, span, nSteps);
+  /*
+   * Since d does not change
+   */
+  double d = (this->intendedLane) * static_cast<double>(LaneWidth) + 2.0;
+  Trajectory trajectory;
+  double newIncrement = 0.0;
+  for (double i : sArray) {
+    trajectory.insertPair(i, d);
+    /*newIncrement = newIncrement + (this->egoVehicleLocation.getVelocity() * SampleTime) + (0.5 * maxAllowedAcceleration * SampleTime * SampleTime);*/
+    /*trajectory.insertPair(this->egoVehicleLocation.getSCoordinatee() + newIncrement, d);*/
+  }
+
+  return (trajectory);
+
+}
+
+std::vector<Trajectory> PathPlanner::computeTrajectories(
+    const std::vector<Commons::State>& nextStates) {
+
+  std::vector<Trajectory> allPossibleTrajectories;
+  for (Commons::State thisState : nextStates) {
+    switch (thisState) {
+      case Commons::State::KeepLane: {
+
+        allPossibleTrajectories.push_back(
+            computeTrajectory_KeepLane(thisState));
+
+        break;
+      }
+      case Commons::State::Move_Left: {
+
+        break;
+      }
+      case Commons::State::Move_Right: {
+
+        break;
+      }
+      case Commons::State::Prepare_To_Change_Left: {
+
+        break;
+      }
+      case Commons::State::Prepare_To_Change_Right: {
+
+        break;
+      }
+      default: {
+        break;
+      }
+    }  // switch (thisState)
+
+  }  // for (State thisState : nextStates)
+
+  return (allPossibleTrajectories);
+
+}
+
+Trajectory PathPlanner::getCheapestTrajectory(
+    std::vector<Trajectory> trajectories) {
+// for now, return the trajectory as is.
+  Trajectory trajectory = trajectories[0];
+
+  return (trajectory);
+}
+
+Trajectory PathPlanner::provideTrajectory() {
+
+  std::vector<Commons::State> nextStates = getPossibleNewStates();
+
+  std::vector<Trajectory> trajectories = computeTrajectories(nextStates);
+
+  Trajectory trajectory = getCheapestTrajectory(trajectories);
+
+  return (trajectory);
+
+// Find all next states wherein a collision
+  /*std::vector<State> nextFeasibleStates = getSafeNextStates();*/
+
+}
+
