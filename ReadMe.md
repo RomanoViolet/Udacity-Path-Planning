@@ -47,7 +47,23 @@ Perfect trajectory control in the ego vehicle.
 
 # Solution Overview
 
-The approach involves:
+The approach involves the following main steps:
+
+1.  `updateNonEgoVehicleData`: Updating the positions of all Non-Ego
+    vehicles sensed by the Ego vehicle at the current time-step;
+
+2.  `updateEgoVehicleData`: Update the position, orientation, and
+    velocity of the Ego vehicle to the current time-step;
+
+3.  `provideTrajectory`: Based on the predicted positions of the Non-Ego
+    vehicles over the planning horizon, compute a new trajectory of the
+    Ego vehicle subject to the constraints listed in the problem
+    description;
+
+4.  `getCoordinatePairs`: Compute a sequence of waypoints that the Ego
+    vehicle must follow based on the computed trajectory.
+
+<!-- end list -->
 
 ``` c++
 pathPlanner.updateNonEgoVehicleData(sensor_fusion);
