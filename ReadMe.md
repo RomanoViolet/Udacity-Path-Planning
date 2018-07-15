@@ -49,7 +49,7 @@ Perfect trajectory control in the ego vehicle.
 
 The approach involves:
 
-``` 
+``` c++
 pathPlanner.updateNonEgoVehicleData(sensor_fusion);
 
 // update ego-vehicle data
