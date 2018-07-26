@@ -1,0 +1,262 @@
+% title Udacity Path Planning Project
+% author(s) Devendra Rai
+% date Now.
+%% Thanks: https://www.soimort.org/notes/161117/
+\documentclass{article}
+\usepackage{fancyhdr}
+\usepackage{extramarks}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{amsfonts}
+\usepackage[plain]{algorithm}
+\usepackage{algpseudocode}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{array}
+% Settings
+\linespread{1.1}
+\pagestyle{fancy}
+
+% Macros
+\providecommand{\tabularnewline}{\\}
+\title{Udacity Path Planning Project}
+
+% Suppress date
+\date{\vspace{-5ex}}
+%\date{}  % Toggle commenting to test
+
+\begin{document}
+
+\maketitle
+% Pandoc does not seem to render title string in the markdown.
+
+% Repeat title string so that pandoc can put it in the markdown.
+%\section{Udacity Path Planning Project}
+
+\section{Context}
+This project implements the “Path Planning” project required in Semester 3 of the Udacity’s \href{https://de.udacity.com/course/self-driving-car-engineer-nanodegree--nd013}{“Self Driving Car NanoDegree Program”} 
+
+
+\section{Tools and Scripts}
+
+\subsection{uWebSocketIO}
+
+
+\textit{Ad-verbatim from Udacity's Instructions:}
+
+\textbf{uWebSocketIO Starter Guide}
+
+All of the projects in Term 2 and some in Term 3 involve using an open source package called uWebSocketIO. This package facilitates the same connection between the simulator and code that was used in the Term 1 Behavioral Cloning Project, but now with C++. The package does this by setting up a web socket server connection from the C++ program to the simulator, which acts as the host. In the project repository there are two scripts for installing uWebSocketIO - one for Linux and the other for macOS.
+
+Note: Only uWebSocketIO branch e94b6e1, which the scripts reference, is compatible with the package installation. Linux Installation:
+
+From the project repository directory run the script: install-ubuntu.sh
+
+\subsection{Term2 Simulator}
+Download from \href{https://github.com/udacity/CarND-Path-Planning-Project}{Term3 Simulator}.
+
+\subsection{Building This Project}
+Execute the following in the \texttt{\$root} directory of this project:
+\texttt{\\ \noindent
+    mkdir build \\
+    cd build \\
+    cmake .. \\
+    make \\
+    }
+
+
+\subsection{Running This Project}
+Execute the following in the \texttt{\$root} directory of this project:
+\texttt{\\ \noindent
+    cd build \\
+    ./path\_planning
+}
+
+Thereafter, start the Term3 simulator, and choose the "Project 1: Path Planning"
+
+\section{Problem Statement}
+\textbf{Given:}
+
+\begin{enumerate}
+    \item A simulated Ego Vehicle;
+    \item A simulated test track, with three lanes in each direction, and simulated traffic on all lanes, and in each direction;
+    \item A fixed number of waypoints along the test track:
+    \item A trajectory control logic built into the ego vehicle
+\end{enumerate}
+
+\noindent\textbf{Compute:}
+
+\indent The path to be travelled by the ego vehicle along the track
+
+
+\vspace*{1em}
+\noindent\textbf{Assume:}
+
+\indent Perfect trajectory control in the ego vehicle.
+
+\vspace*{1em}
+\noindent\textbf{Constraints:}
+
+\begin{enumerate}
+    \item No collision with any other vehicle;
+    \item Maintain a minimum average speed of 40 km/hr. This constraint is enforced by the simulator.
+    \item The ego vehicle must change lanes at least once during the entire journey along the track.
+    \item go vehicle must travel according to right-hand-drive traffic rules (e.g., those in Germany) and obey all traffic laws.
+    \begin{enumerate}
+        \item Ego vehicle must not take too long to cross lanes (contraint enforced by the simulator)
+    \end{enumerate}
+\end{enumerate}
+
+
+\section{Solution Overview}
+The approach involves the following main steps:
+\begin{enumerate}
+    \item \texttt{updateNonEgoVehicleData}: Updating the positions of all Non-Ego vehicles sensed by the Ego vehicle at the current time-step;
+    \item \texttt{updateEgoVehicleData}: Update the position, orientation, and velocity of the Ego vehicle to the current time-step;
+    \item \texttt{provideTrajectory}: Based on the predicted positions of the Non-Ego vehicles over the planning horizon, compute a new trajectory of the Ego vehicle subject to the constraints listed in the problem description;
+    \item  \texttt{getCoordinatePairs}: Compute a sequence of waypoints that the Ego vehicle must follow based on the computed trajectory.
+    
+\end{enumerate}
+
+All steps are available as method \texttt{PathPlanner C++} class.
+The \texttt{main.cpp} creates an instance \texttt{pathPlanner} of the class \texttt{PathPlanner} and invokes the methods appropriately to solve the path planning problem:
+\vspace*{1em}
+%\noindent\makebox[\linewidth]{\rule{\paperwidth}{0.4pt}}
+
+{\lstset{language=C++,
+    basicstyle=\ttfamily,
+    keywordstyle=\color{blue}\ttfamily,
+    stringstyle=\color{red}\ttfamily,
+    commentstyle=\color{white!40!black}\ttfamily,
+    %frame=single,
+    morecomment=[l][\color{magenta}]{\#}
+}
+    \begin{lstlisting}[language=C++]
+pathPlanner.updateNonEgoVehicleData(sensor_fusion);
+
+// update ego-vehicle data
+pathPlanner.updateEgoVehicleData(EgoVehicleData, false);
+
+// choose an appropriate trajectory
+optimalTrajectory = pathPlanner.provideTrajectory();
+
+// extract the vector of coordinates
+coordinatePairs = optimalTrajectory.getCoordinatePairs();
+    \end{lstlisting}
+}
+
+\section{Solution Details}
+
+The \texttt{updateNonEgoVehicleData} and \texttt{updateEgoVehicleData} methods are relatively straightforward. 
+The method \texttt{updateNonEgoVehicleData} reads the information from \texttt{sensor\_fusion} function provided by the simulator, and updates the position, velocity, and orientation of each non-ego vehicle reported by \texttt{sensor\_fusion}. 
+
+The method \texttt{updateEgoVehicleData} updates the internal knowledge of the position, velocity, and orientation of the ego vehicle based on sensor data.
+
+The method \texttt{provideTrajectory} is composed of two private methods:
+\begin{enumerate}
+    \item \texttt{getLaneChangeSuggestion()}: Provides an overall cost of execution a change of lanes based on the costs associated to (a) staying in lane, (b) changing to the left lane, and (c) changing to the right lane. 
+\end{enumerate}
+
+\section{Assumptions}
+For the methods described below, the following information is assumed given:
+
+The cost $ c $ of a lane-change maneuver is a number in the range [0, 1]. That is:
+\begin{equation}
+0 \leq c \leq 1 (highest \,cost)
+\end{equation}
+
+Furthermore, it is given that the track has $ n \geq 1$ lanes in the intended direction of travel, with lane $ n = 1 $ being the left-most lane.
+The final $ n = k $ lane which the ego vehicle must be in at the end of the track is also provided.
+
+The track is assumed to be $ l $ meters long.
+
+A distance \texttt{returnToLaneBuffer} is used to force the ego vehicle to move into lane $ l = k $ after travelling a maximum total distance $ l -  \texttt{returnToLaneBuffer}$.
+
+\subsection{Method \texttt{costOfLaneChangeLeft}}
+Assuming
+The decision to change the lane to the left is based on the following criteria:
+\begin{enumerate}
+\item The cost is set to $ c = 1 $ if the ego is already traveling in the  left most lane, i.e., $ n = 1 $
+\item The cost is set to $ c = 1 $ during during the last \texttt{returnToLaneBuffer} meters from the end of the track, provided the ego vehicle is already in the intended final lane.
+\item For all other cases, the feasibility of staying in lane $ n' = n - 1 $ is calculated using the method \texttt{costForLaneChange}. If this step yields the lowest cost, then the change to lane $ n' = n - 1 $ is completed. It is assumed that if it is feasible to stay in the lane $ n' = n -1 $ then the change of lanes $ n \rightarrow n' $ is also always feasible. However, this assumption may not hold for realistic driving scenarios.
+\end{enumerate}
+
+All costs are computed by a common private method \texttt{costForLaneChange}which operates are follows:
+\subsection{Method \texttt{costForLaneChange}}
+First, the planning horizon in computed: a window of time starting at the current instant, and the duration is set to the length of time into the future for which trajectories are to be generated. Longer horizons are not recommended since these reduce the agility of the ego vehicle to respond to changes in the environment (e.g., new traffic pattern). On the other hand, very short planning horizons are also not computationally efficient (e.g., would need to plan multiple times to execute one lane change)
+
+
+\begin{figure*}[!h]
+    \begin{tabular*}{1\textwidth}{@{\extracolsep{\fill}}>{\raggedleft}p{0.35\textwidth}>{\raggedright}p{0.65\textwidth}}
+        Symbol & Semantic\tabularnewline
+        $J$ & Maximum Jerk limit, provided at design time. \\[1em]\tabularnewline
+        $A$ & Maximum Acceleration limit, provided at design time. \\[1em]\tabularnewline
+        $t$ & Time at the beginning of the planning phase\\[1em]\tabularnewline
+        $\triangle t$ & Length of the planning horizon\\[1em]\tabularnewline
+        $v^{\text{ego}}(t)$ & Speed of the Ego vehicle at the beginning of the planning phase\\[1em]\tabularnewline
+        $\left|{\triangle v}^{\text{ego}}\right|$ & Maximum change in the velocity of the ego vehicle by the end of the current planning phase \\[1em]\tabularnewline
+        $v^{\text{ego}}_{\text{max}}( t+\triangle t )$ & Maximum possible speed of the ego vehicle at the end of the current planning phase subject to performance restrictions, and traffic conditions \\[1em]\tabularnewline
+        $v^{\text{ego}}_{\text{min}}( t+\triangle t )$ & Minimum possible speed of the ego vehicle at the end of the current planning phase subject to performance restrictions, and traffic conditions \\[1em]\tabularnewline
+        & \tabularnewline
+    \end{tabular*}
+    
+    \caption{Symbols Used In the Text}
+    
+    
+\end{figure*}
+
+Second, based on provided jerk and acceleration limits, the maximum change of velocity $ {\triangle v}^{\text{ego}} $ of the ego vehicle within the time-horizon  $ \triangle t $ being considered is computed. That is:
+
+
+\begin{equation}
+\left| v^{\text{ego}} ( t+\triangle t ) - v^{\text{ego}}(t) \right|   \leq \left| {\triangle v}^{\text{ego}} \right|
+\end{equation}
+
+where:
+
+\begin{equation}
+\left| {\triangle v}^{\text{ego}} \right| = \text{min}\left\{ \intop\intop_{t=0}^{\triangle t}Jdt.dt,\intop_{t=0}^{\triangle t}Adt\right\}
+\end{equation}
+
+
+where $ t $ is the time instant at the beginning of the planning phase.
+
+In case there is no in-lane leading traffic in front of the ego vehicle, the planner computes a trajectory which requires the ego vehicle to speed up, upto the maximum allowed speed. In case, a leading in-lane vehicle is detected, a maximum ego velocity $ v^{\text{ego}}_{\text{max}}( t+\triangle t ) $ necessary to avoid rear-ending the leading vehicle is computed. with:
+
+\begin{equation}
+v^{\text{ego}}_{\text{max}}( t+\triangle t ) \leq v^{\text{ego}}(t) +  \left| {\triangle v}^{\text{ego}} \right|
+\end{equation}
+
+
+In case there a trailing in-lane non-ego vehicle, a minimum ego velocity $ v^{\text{ego}}_{\text{min}}( t+\triangle t ) $ in order to avoid being rear-ended by the trailing vehicle is computed, where:
+
+\begin{equation}
+v^{\text{ego}}_{\text{min}}( t+\triangle t ) \geq v^{\text{ego}}(t) -  \left| {\triangle v}^{\text{ego}} \right|
+\end{equation}
+
+Obviously:
+\begin{equation}
+v^{\text{ego}}_{\text{min}}( t+\triangle t ) > v^{\text{ego}}_{\text{max}}( t+\triangle t ) \implies \text{Change Lane}
+\end{equation}
+
+
+Under the condition $ v^{\text{ego}}_{\text{min}}( t+\triangle t ) > v^{\text{ego}}_{\text{max}}( t+\triangle t ) $, the velocity associated with the planned trajectory over the planning horizon is computed as:
+
+\begin{equation}
+v^{\text{ego}}( t+\triangle t ) = \frac{v^{\text{ego}}_{\text{min}}( t+\triangle t ) + v^{\text{ego}}_{\text{max}}( t+\triangle t )}{2}
+\end{equation}
+
+
+
+The $ v^{\text{ego}} $ will be followed in case a change of lanes is also not possible.
+
+In case that $ v^{\text{ego}}_{\text{min}}( t+\triangle t ) \leq v^{\text{ego}}_{\text{max}}( t+\triangle t ) $, the ego velocity is:
+
+\begin{equation}
+v^{\text{ego}}( t+\triangle t ) =  v^{\text{ego}}_{\text{max}}( t+\triangle t ), \text{if }  v^{\text{ego}}_{\text{min}}( t+\triangle t ) \leq v^{\text{ego}}_{\text{max}}( t+\triangle t ) 
+\end{equation}
+
+
+
+\end{document}
